@@ -252,6 +252,7 @@ class Collector(object):
                 result = Batch(
                     act=[spaces[i].sample() for i in self._ready_env_ids])
             else:
+                # print(self.data)
                 if no_grad:
                     with torch.no_grad():  # faster than retain_grad version
                         result = self.policy(self.data, last_state)
@@ -274,6 +275,7 @@ class Collector(object):
 
             # step in env
             if not is_async:
+                # print('collector:', self.data)
                 obs_next, rew, done, info = self.env.step(self.data.act)
             else:
                 # store computed actions, states, etc

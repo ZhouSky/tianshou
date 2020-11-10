@@ -196,6 +196,7 @@ class BaseVectorEnv(gym.Env):
         None, fetch unfinished step() calls instead.
         """
         self._assert_is_not_closed()
+        print('venvs', action)
         id = self._wrap_id(id)
         if not self.is_async:
             assert len(action) == len(id)

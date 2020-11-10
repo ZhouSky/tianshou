@@ -133,12 +133,16 @@ class PPOPolicy(PGPolicy):
             Please refer to :meth:`~tianshou.policy.BasePolicy.forward` for
             more detailed explanation.
         """
+        # print(batch,state,kwargs)
         logits, h = self.actor(batch.obs, state=state, info=batch.info)
+        # print(logits,h)
         if isinstance(logits, tuple):
             dist = self.dist_fn(*logits)
         else:
             dist = self.dist_fn(logits)  # type: ignore
+        # print(dist)
         act = dist.sample()
+        # print(act)
         if self._range:
             act = act.clamp(self._range[0], self._range[1])
         return Batch(logits=logits, act=act, state=h, dist=dist)
