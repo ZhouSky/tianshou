@@ -1,78 +1,52 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
-from myenv import MyEnv
-from datautil import read_data_from_file, MTDataset_Split, MTDataset
+import pprint
+import os
+import argparse
+
+from tianshou.policy import PPOPolicy
+from tianshou.env import SubprocVectorEnv, DummyVectorEnv
+from tianshou.trainer import onpolicy_trainer
+from tianshou.data import Collector, ReplayBuffer
+from tianshou.utils.net.discrete import Actor, Critic
+from tianshou.utils.net.common import Net
+
+from mytest.env import create_env
 
 
-def generate_task_index(task_interval):
-    task_ind = np.zeros((task_interval[-1]), dtype=np.int32)
-    for i in range(task_interval.size - 1):
-        task_ind[task_interval[i]: task_interval[i + 1]] = i
-    return task_ind
+class EnvArgs:
+    lr = 1e-3
+    size_task_class = 4  # means batch size: s_t_c * n_t * n_c
+    hidden_dim = [600]
+    train_size = 0.8
+    once_iter = 20
+    max_iter = 1000
+    data_path = "./Office_Caltech_alexnet.txt"
 
 
-def compute_errors(output, task_ind, label, num_task):
-    num_ins = np.zeros([num_task])
-    errors = np.zeros([num_task + 1])
-    for i in range(output.shape[0]):
-        num_ins[task_ind[i]] += 1
-        if np.argmax(output[i, :]) != label[i]:
-            errors[task_ind[i]] += 1
-    for i in range(num_task):
-        errors[i] = errors[i] / num_ins[i]
-    errors[-1] = np.mean(errors[0:num_task])
-    return errors
+class PPOArgs:
+    gamma = 0.99
+    max_grad_norm = 0.5
+    eps_clip = 0.2
+    vf_coef = 0.5
+    ent_coef = 0.0
 
 
-def test_net(net, testdata, testlabel, test_task_interval):
-    task_ind = generate_task_index(test_task_interval)
-    outputs = []
-    with torch.no_grad():
-        for a in range(testdata.shape[0]):
-            outputs.append(
-                net(
-                    torch.tensor(testdata[a], dtype=torch.float),
-                    task_ind[a],
-                )
-            )
-        output = torch.stack(outputs, 0)
-        test_error = compute_errors(
-            output.numpy(), task_ind, testlabel, test_task_interval.size - 1
-        )
-
-        return test_error
-
-
-class MTN(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_task):
-        super(MTN, self).__init__()
-        shared_models = [nn.Linear(input_dim, hidden_dim[0]), nn.ReLU()]
-        for i in range(1, len(hidden_dim)):
-            shared_models.extend(
-                [nn.Linear(hidden_dim[i - 1], hidden_dim[i]), nn.ReLU()]
-            )
-        self.shared_models = nn.ModuleList(shared_models)
-        self.task_models = nn.ModuleList(
-            [nn.Linear(hidden_dim[-1], output_dim) for _ in range(num_task)]
-        )
-        self.num_task = num_task
-        self.num_class = output_dim
-        self.reset()
-
-    def forward(self, x, task_index):
-        out = x
-        for _, m in enumerate(self.shared_models):
-            out = m(out)
-        return F.softmax(self.task_models[task_index](out), dim=-1)
-
-    def reset(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight)
+class TrainArgs:
+    lr = 1e-3
+    layer_num = 1
+    seed = 0
+    training_num = 1
+    test_num = 1
+    buffer_size = 200
+    logdir = 'log'
+    epoch = 2
+    step_per_epoch = 8
+    collect_per_step = 1
+    repeat_per_collect = 2
+    batch_size = 64
 
 
 def reward_fn(reward_info):
@@ -91,31 +65,69 @@ def state_fn(state_info):
     return end_losses
 
 
-if __name__ == '__main__':
-    lr = 1e-3
-    size_task_class = 4  # means batch size: s_t_c * n_t * n_c
-    hidden_dim = [600]
-    train_size = 0.8
-    once_iter = 50
-    max_iter = 500
+def learn_controller(EnvArgs, TrainArgs, PPOArgs):
+    print('Start train controller!')
+    env = create_env(EnvArgs, reward_fn, state_fn)
+    state_shape = env.observation_space.shape or env.observation_space.n
+    action_shape = env.action_space.shape or env.action_space.n
+    train_envs = create_env(EnvArgs, reward_fn, state_fn)
+    # train_envs = DummyVectorEnv([
+    #     lambda: create_env(EnvArgs, reward_fn, state_fn)
+    #     for _ in range(TrainArgs.training_num)])
+    test_envs = create_env(EnvArgs, reward_fn, state_fn)
+    # test_envs = DummyVectorEnv([
+    #     lambda: create_env(EnvArgs, reward_fn, state_fn)
+    #     for _ in range(TrainArgs.test_num)])
 
-    data, label, task_interval, num_task, num_class = read_data_from_file(
-        "./Office_Caltech_alexnet.txt"
-    )
-    feature_dim = data.shape[-1]
-    data_split = MTDataset_Split(data, label, task_interval, num_class)
-    (
-        traindata,
-        trainlabel,
-        train_task_interval,
-        testdata,
-        testlabel,
-        test_task_interval,
-    ) = data_split.split(train_size)
-    trainbatcher = MTDataset(
-        traindata, trainlabel, train_task_interval, num_class, size_task_class
-    )
-    env_net = MTN(feature_dim, hidden_dim, num_class, num_task)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(env_net.parameters(), lr)
-    env = MyEnv(env_net, optimizer, criterion, trainbatcher, once_iter, max_iter, reward_fn, state_fn)
+    np.random.seed(TrainArgs.seed)
+    torch.manual_seed(TrainArgs.seed)
+    train_envs.seed(TrainArgs.seed)
+    test_envs.seed(TrainArgs.seed)
+
+    net = Net(TrainArgs.layer_num, state_shape)
+    # print(action_shape)
+    actor = Actor(net, action_shape)
+    critic = Critic(net)
+    optimizer_rl = torch.optim.Adam(list(
+        actor.parameters()) + list(critic.parameters()), lr=TrainArgs.lr)
+    dist = torch.distributions.Categorical
+    policy = PPOPolicy(
+        actor, critic, optimizer_rl, dist, PPOArgs.gamma,
+        max_grad_norm=PPOArgs.max_grad_norm,
+        eps_clip=PPOArgs.eps_clip,
+        vf_coef=PPOArgs.vf_coef,
+        ent_coef=PPOArgs.ent_coef,
+        action_range=None)
+
+    train_collector = Collector(
+        policy, train_envs, ReplayBuffer(TrainArgs.buffer_size),
+        preprocess_fn=None)
+    test_collector = Collector(policy, test_envs, preprocess_fn=None)
+
+    writer = SummaryWriter(os.path.join(TrainArgs.logdir, 'MTL', 'ppo'))
+
+    def stop_fn(mean_rewards):
+        # if env.env.spec.reward_threshold:
+        #     return mean_rewards >= env.spec.reward_threshold
+        # else:
+        return False
+
+    result = onpolicy_trainer(
+        policy, train_collector, test_collector, TrainArgs.epoch,
+        TrainArgs.step_per_epoch, TrainArgs.collect_per_step, TrainArgs.repeat_per_collect,
+        TrainArgs.test_num, TrainArgs.batch_size, stop_fn=stop_fn, writer=writer)
+    pprint.pprint(result)
+    print('End train controller!')
+
+    return policy
+
+
+if __name__ == '__main__':
+
+    policy = learn_controller(EnvArgs, TrainArgs, PPOArgs)
+    # Let's watch its performance!
+    env = create_env(EnvArgs, reward_fn, state_fn)
+    collector = Collector(policy, env, preprocess_fn=None)
+    result = collector.collect(n_step=2000, render=None)
+    print(f'Final reward: {result["rew"]}, length: {result["len"]}')
+

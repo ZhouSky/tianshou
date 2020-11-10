@@ -23,6 +23,7 @@ class Actor(nn.Module):
     ) -> None:
         super().__init__()
         self.preprocess = preprocess_net
+        # print(hidden_layer_size, action_shape)
         self.last = nn.Linear(hidden_layer_size, np.prod(action_shape))
         self.softmax_output = softmax_output
 

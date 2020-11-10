@@ -26,8 +26,9 @@ def _is_batch_set(data: Any) -> bool:
         return data.dtype == np.object and all(
             isinstance(e, (dict, Batch)) for e in data)
     elif isinstance(data, (list, tuple)):
-        if len(data) > 0 and all(isinstance(e, (dict, Batch)) for e in data):
-            return True
+        # if len(data) > 0 and all(isinstance(e, (dict, Batch)) for e in data):
+        #     return True
+        return len(data) > 0 and all(isinstance(e, (dict, Batch)) for e in data)
     return False
 
 

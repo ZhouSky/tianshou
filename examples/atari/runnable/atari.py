@@ -114,8 +114,7 @@ class preprocessing(object):
         if len(observation) == 0:
             observation = [self._pool_and_resize()
                            for _ in range(self.frame_skip)]
-        while len(observation) > 0 and \
-                len(observation) < self.frame_skip:
+        while 0 < len(observation) < self.frame_skip:
             observation.append(observation[-1])
         terminal = self.count >= self.max_episode_steps
         return np.array(observation), total_reward, \

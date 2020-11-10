@@ -54,7 +54,7 @@ def onpolicy_trainer(
         feed in the policy network.
     :param function train_fn: a function receives the current number of epoch
         and step index, and performs some operations at the beginning of
-        training in this poch.
+        training in this epoch.
     :param function test_fn: a function receives the current number of epoch
         and step index, and performs some operations at the beginning of
         testing in this epoch.
@@ -85,6 +85,7 @@ def onpolicy_trainer(
             total=step_per_epoch, desc=f"Epoch #{epoch}", **tqdm_config
         ) as t:
             while t.n < t.total:
+                # print(t.n)
                 if train_fn:
                     train_fn(epoch, env_step)
                 result = train_collector.collect(n_episode=collect_per_step)
