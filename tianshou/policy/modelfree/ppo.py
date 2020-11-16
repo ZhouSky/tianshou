@@ -79,7 +79,7 @@ class PPOPolicy(PGPolicy):
         assert (
             dual_clip is None or dual_clip > 1.0
         ), "Dual-clip PPO parameter should greater than 1.0."
-        self._dual_clip = dual_clip
+        self._dual_clip = dual_clip  # what is this?
         self._value_clip = value_clip
         self._rew_norm = reward_normalization
 
@@ -134,6 +134,7 @@ class PPOPolicy(PGPolicy):
             more detailed explanation.
         """
         # print(batch,state,kwargs)
+        # print(batch)
         logits, h = self.actor(batch.obs, state=state, info=batch.info)
         # print(logits,h)
         if isinstance(logits, tuple):

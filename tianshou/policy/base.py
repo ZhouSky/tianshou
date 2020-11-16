@@ -289,7 +289,7 @@ def _episodic_return(
     """Numba speedup: 4.1s -> 0.057s."""
     returns = np.roll(v_s_, 1)
     m = (1.0 - done) * gamma
-    delta = rew + v_s_ * m - returns
+    delta = rew + v_s_ * m - returns  # delta[0] may have problem if the last v_s_ is not 0
     m *= gae_lambda
     gae = 0.0
     for i in range(len(rew) - 1, -1, -1):

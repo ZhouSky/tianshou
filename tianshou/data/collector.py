@@ -102,7 +102,7 @@ class Collector(object):
         self.buffer = buffer
         self.policy = policy
         self.preprocess_fn = preprocess_fn
-        self.process_fn = policy.process_fn
+        self.process_fn = policy.process_fn  # no usage
         self._action_space = env.action_space
         self._action_noise = action_noise
         self._rew_metric = reward_metric or Collector._default_rew_metric
@@ -149,10 +149,14 @@ class Collector(object):
     def reset_env(self) -> None:
         """Reset all of the environment(s)' states and the cache buffers."""
         self._ready_env_ids = np.arange(self.env_num)
+        # print(self.data)
         obs = self.env.reset()
+        # print(obs)
         if self.preprocess_fn:
             obs = self.preprocess_fn(obs=obs).get("obs", obs)
         self.data.obs = obs
+        # print(self.data)
+        # assert False
         for b in self._cached_buf:
             b.reset()
 
