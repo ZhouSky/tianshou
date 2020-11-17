@@ -17,8 +17,8 @@ class EnvArgs:
         self.size_task_class = 4  # means batch size: s_t_c * n_t * n_c
         self.hidden_dim = [600]
         self.train_size = 0.8
-        self.iter_step = 5
-        self.max_iter = 100
+        self.iter_step = 10
+        self.max_iter = 500
         self.data_path = "./Office_Caltech_alexnet.txt"
         self.reward_fn = reward_fn
         self.state_fn = state_fn
@@ -31,12 +31,12 @@ class MTLEnv(gym.Env):
         self.criterion = criterion
         self.data_batcher = data_batcher
 
+        self.iter_step = iter_step
+        self.max_iter = max_iter
         self.max_iter_epoch = np.ceil(
             data_batcher.data.shape[0] / (data_batcher.batch_size * data_batcher.num_task * data_batcher.num_class)
         ).astype(np.int32)
-
-        self.iter_step = iter_step
-        self.max_iter = max_iter
+        self.max_epoch = np.ceil(self.max_iter / self.max_iter_epoch)
         self.iter = 0
         self.done = False
 
@@ -72,12 +72,17 @@ class MTLEnv(gym.Env):
         """Generate state(observation) of MyTestEnv"""
         return self.state_fn(self.info)
 
+    def setMaxEpoch(self, max_epoch):
+        self.max_iter = self.max_iter_epoch * max_epoch
+        self.max_epoch = max_epoch
+
     def step(self, action):
         if self.done:
             raise ValueError('step after done !!!')
 
         for i in range(self.info['num_task']):
             self.coes[i] *= self.coe_mul[(action % 3**(i + 1)) // (3**i)]
+            self.coes[i] = max(self.coe_clip[0], min(self.coe_clip[1], self.coes[i]))
 
         all_losses = [[] for _ in range(self.env_net.num_task)]
         base = self.env_net.num_class * self.data_batcher.batch_size

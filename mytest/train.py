@@ -36,10 +36,10 @@ class TrainArgs:
     test_num = 1
     buffer_size = 256
     logdir = 'log'
-    epoch = 1  # each epoch will test policy once
-    step_per_epoch = 1  # num of iter per epoch for policy train
+    epoch = 100  # each epoch will test policy once
+    step_per_epoch = 10  # num of iter per epoch for policy train
     collect_per_step = 1  # num of eps per iter for policy train
-    repeat_per_collect = 2  # meaningless
+    repeat_per_collect = 2  # repeat train
     batch_size = 64  # meaningless
 
 
@@ -79,10 +79,12 @@ def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs):
         preprocess_fn=None)
     test_collector = Collector(policy, test_envs, preprocess_fn=None)
 
+    writer = SummaryWriter(os.path.join(TrainArgs.logdir, 'MTL', 'ppo'))
+
     result = onpolicy_trainer(
         policy, train_collector, test_collector, TrainArgs.epoch,
         TrainArgs.step_per_epoch, TrainArgs.collect_per_step, TrainArgs.repeat_per_collect,
-        TrainArgs.test_num, TrainArgs.batch_size)
+        TrainArgs.test_num, TrainArgs.batch_size, writer=writer)
     pprint.pprint(result)
     print('-----End train RL policy-----')
 
