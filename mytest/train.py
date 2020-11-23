@@ -69,7 +69,7 @@ def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs):
     return policy
 
 
-def train_RMTL(env, policy, max_epoch):
+def train_RMTL(env, policy, max_epoch, writer):
     print('-----Start train MTL net-----')
     if isinstance(env, MTLEnv):
         env = DummyVectorEnv([lambda: env])
@@ -77,14 +77,28 @@ def train_RMTL(env, policy, max_epoch):
     data = Batch(state={}, obs={}, act={}, rew={}, done={}, info={}, obs_next={}, policy={})
     data.obs = env.reset()
     done = False
+    tag = 'train-MTL'
     while not done:
         action = policy(data).act
         data.obs, rew, done, info = env.step(action)
-        losses = np.asarray(info[0]['losses'])
-        for ind, ite in enumerate(info[0]['iter']):
+        info = info[0]
+        losses = np.asarray(info['losses'])
+        for ind, ite in enumerate(info['iter']):
             if ite % env.workers[0].env.max_iter_epoch == 0:
-                print('Epoch %d, Iter: %d, Reward: %f, loss: %s' % (
-                    ite // env.workers[0].env.max_iter_epoch, ite, rew, losses[:, ind]))
+                epoch = ite // env.workers[0].env.max_iter_epoch
+                # print('Epoch %d, Iter: %d, Reward: %f, loss: %s' % (
+                #     epoch, ite, rew, losses[:, ind]))
+                loss = {}
+                action = {}
+                coes = {}
+                for t in range(len(losses[:, ind])):
+                    loss[f'task{t}'] = losses[:, ind][t]
+                    action[f'task{t}'] = info['action'][t]
+                    coes[f'task{t}'] = info['coes'][t]
+                writer.add_scalars(tag + '/loss', loss, epoch)
+                writer.add_scalars(tag + '/action', action, epoch)
+                writer.add_scalars(tag + '/coes', coes, epoch)
+                writer.add_scalar(tag + '/reward', rew, epoch)
     print('-----End train MTL net-----')
     return env.workers[0].env.env_net
 

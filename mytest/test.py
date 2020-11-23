@@ -1,6 +1,8 @@
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
+import os
+from torch.utils.tensorboard import SummaryWriter
 
 from mytest.env import EnvArgs, create_MTLEnv
 from mytest.net import MTN, STNS
@@ -34,7 +36,8 @@ def test_RMTL():
     policy = train_RLPolicy(args, TrainArgs, PPOArgs)
     env_net = MTN(feature_dim, args.hidden_dim, num_class, num_task)
     env = create_MTLEnv(env_net, args, trainbatcher, reward_fn, state_fn)
-    net = train_RMTL(env, policy, 400)
+    writer = SummaryWriter(os.path.join(TrainArgs.logdir, 'MTL', 'mtl'))
+    net = train_RMTL(env, policy, 500, writer)
     return net
 
 def test_STL():
