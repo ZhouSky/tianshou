@@ -1,6 +1,7 @@
 import gym
 import numpy as np
 from typing import Any, List, Union, Optional, Callable
+import pprint
 
 from tianshou.env.worker import EnvWorker, DummyEnvWorker, SubprocEnvWorker, \
     RayEnvWorker
@@ -229,6 +230,9 @@ class BaseVectorEnv(gym.Env):
                 info["env_id"] = env_id
                 result.append((obs, rew, done, info))
                 self.ready_id.append(env_id)
+        # pprint.pprint(result)
+        # pprint.pprint(list(map(np.stack, zip(*result))))
+        # assert False
         return list(map(np.stack, zip(*result)))
 
     def seed(

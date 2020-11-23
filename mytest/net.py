@@ -2,6 +2,7 @@ from abc import ABC
 import torch
 import torch.nn as nn
 import numpy as np
+import torch.nn.functional as F
 
 
 class BaseNet(nn.Module, ABC):
@@ -27,15 +28,16 @@ class STNS(BaseNet):
                 sub_models.extend(
                     [nn.Linear(hidden_dim[i - 1], hidden_dim[i]), nn.ReLU()]
                 )
-            sub_models.extend(
-                [nn.Linear(hidden_dim[-1], output_dim), nn.Softmax(dim=-1)]
-            )
+            sub_models.append(nn.Linear(hidden_dim[-1], output_dim))
             models.append(nn.Sequential(*sub_models))
         self.models = nn.ModuleList(models)
         self.reset()
 
-    def forward(self, x, task_index=0):
-        return self.models[task_index](x)
+    def forward(self, x, task_index=0, softmax=False):
+        out = self.models[task_index](x)
+        if softmax:
+            out = F.softmax(out, dim=-1)
+        return out
 
 
 class MTN(BaseNet):
@@ -53,32 +55,9 @@ class MTN(BaseNet):
         self.num_class = output_dim
         self.reset()
 
-    def forward(self, x, task_index):
+    def forward(self, x, task_index, softmax=False):
         out = self.shared_models(x)
-        return self.task_models[task_index](out)
-
-
-class MTN2(BaseNet):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_task):
-        super().__init__()
-        models = [nn.Linear(num_task * input_dim, hidden_dim[0]), nn.ReLU()]
-        for i in range(1, len(hidden_dim)):
-            models.extend([nn.Linear(hidden_dim[i - 1], hidden_dim[i]), nn.ReLU()])
-        models.append(nn.Linear(hidden_dim[-1], output_dim * num_task))
-        self.models = nn.Sequential(*models)
-        self.input_dim = input_dim
-        self.num_task = num_task
-        self.output_dim = output_dim
-
-    def forward(self, x, task=()):
-        if not task:
-            task = list(range(self.num_task))
-        start = 0
-        inp = []
-        for i, t in enumerate(task):
-            inp.extend([torch.zeros(x.size()[0], (t - start) * self.input_dim), x[i * self.input_dim: (i + 1) * self.input_dim]])
-            start = t + 1
-        inp.append(torch.zeros(x.size()[0], (self.num_task - task[-1] - 1) * self.input_dim))
-        inp = torch.cat(inp, axis=-1)
-        outp = self.models(inp)
-        return outp
+        out = self.task_models[task_index](out)
+        if softmax:
+            out = F.softmax(out, dim=-1)
+        return out

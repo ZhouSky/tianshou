@@ -6,7 +6,8 @@ from mytest.env import EnvArgs, create_MTLEnv
 from mytest.net import MTN, STNS
 from mytest.datautil import read_data_from_file, MTDataset, MTDataset_Split
 from mytest.testutil import test_net
-from mytest.train import train_base, train_RMTL, train_RLPolicy, TrainArgs, PPOArgs
+from mytest.train import train_base, train_RMTL, train_RLPolicy
+from mytest.arg import PPOArgs, EnvArgs, TrainArgs
 
 
 def reward_fn(info):
@@ -23,15 +24,17 @@ def state_fn(info):
     if not info.get('losses'):
         return np.zeros(info['num_task'])
     end_losses = np.asanyarray(info['losses'])[:, -1]
-    end_losses = (end_losses - end_losses.mean()) / (end_losses.std() + 1e-8)
+    min = end_losses.min()
+    max = end_losses.max()
+    end_losses = (end_losses - min) / (max - min)
     return end_losses
 
 
 def test_RMTL():
-    policy = train_RLPolicy(EnvArgs(reward_fn, state_fn), TrainArgs, PPOArgs)
+    policy = train_RLPolicy(args, TrainArgs, PPOArgs)
     env_net = MTN(feature_dim, args.hidden_dim, num_class, num_task)
     env = create_MTLEnv(env_net, args, trainbatcher, reward_fn, state_fn)
-    net = train_RMTL(env, policy, 200)
+    net = train_RMTL(env, policy, 400)
     return net
 
 def test_STL():

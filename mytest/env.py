@@ -9,19 +9,7 @@ import numpy as np
 
 from mytest.datautil import read_data_from_file, MTDataset_Split, MTDataset
 from mytest.net import MTN
-
-
-class EnvArgs:
-    def __init__(self, reward_fn, state_fn):
-        self.lr = 1e-3
-        self.size_task_class = 4  # means batch size: s_t_c * n_t * n_c
-        self.hidden_dim = [600]
-        self.train_size = 0.8
-        self.iter_step = 10
-        self.max_iter = 500
-        self.data_path = "./Office_Caltech_alexnet.txt"
-        self.reward_fn = reward_fn
-        self.state_fn = state_fn
+from mytest.arg import EnvArgs
 
 
 class MTLEnv(gym.Env):
@@ -80,28 +68,25 @@ class MTLEnv(gym.Env):
         if self.done:
             raise ValueError('step after done !!!')
 
+        self.info['action'] = [self.coe_mul[(action % 3**(i + 1)) // (3**i)] for i in range(self.info['num_task'])]
         for i in range(self.info['num_task']):
-            self.coes[i] *= self.coe_mul[(action % 3**(i + 1)) // (3**i)]
+            self.coes[i] *= self.info['action'][i]
             self.coes[i] = max(self.coe_clip[0], min(self.coe_clip[1], self.coes[i]))
-
-        all_losses = [[] for _ in range(self.env_net.num_task)]
+        self.info['coes'] = self.coes
+        self.info['losses'] = [[] for _ in range(self.env_net.num_task)]
+        self.info['iter'] = []
         base = self.env_net.num_class * self.data_batcher.batch_size
         for i in range(self.iter_step):
             sampled_data, sampled_label, _, _ = self.data_batcher.get_next_batch()
-            sampled_label = torch.tensor(
-                [np.where(sampled_label[_] == 1)[0][0] for _ in range(sampled_label.shape[0])]
-            )
+            sampled_data = torch.from_numpy(sampled_data)
+            sampled_label = torch.from_numpy(np.asarray(sampled_label == 1).nonzero()[-1])
 
             losses = []
             for t in range(self.env_net.num_task):
-                output = self.env_net(
-                    torch.from_numpy(sampled_data[t * base: (t + 1) * base, :, ]), t,
-                )
-                loss = self.criterion(
-                    output, sampled_label[t * base: (t + 1) * base],
-                )
+                output = self.env_net(sampled_data[t * base: (t + 1) * base, :, ], t)
+                loss = self.criterion(output, sampled_label[t * base: (t + 1) * base],)
                 losses.append(loss)
-                all_losses[t].append(loss.item())
+                self.info['losses'][t].append(loss.item())
 
             self.optimizer.zero_grad()
             obj = 0
@@ -111,12 +96,10 @@ class MTLEnv(gym.Env):
             self.optimizer.step()
 
             self.iter += 1
+            self.info['iter'].append(self.iter)
             if self.iter >= self.max_iter:
                 self.done = True
                 break
-
-        self.info['losses'] = all_losses
-        self.info['iter'] = list(range(self.iter - self.iter_step + 1, self.iter + 1))
 
         return self._get_state(), self._get_reward(), self.done, self.info
 

@@ -1,6 +1,4 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
@@ -14,33 +12,9 @@ from tianshou.data import Collector, ReplayBuffer, Batch
 from tianshou.utils.net.discrete import Actor, Critic
 from tianshou.utils.net.common import Net
 
-from mytest.net import MTN, STNS
-from mytest.env import create_MTLEnv, EnvArgs, MTLEnv
-from mytest.testutil import test_net
-from mytest.datautil import read_data_from_file, MTDataset, MTDataset_Split
-
-
-class PPOArgs:
-    gamma = 0.99
-    max_grad_norm = 0.5
-    eps_clip = 0.2
-    vf_coef = 0.5
-    ent_coef = 0.0
-
-
-class TrainArgs:
-    lr = 1e-3
-    layer_num = 1
-    seed = 0
-    training_num = 1
-    test_num = 1
-    buffer_size = 256
-    logdir = 'log'
-    epoch = 100  # each epoch will test policy once
-    step_per_epoch = 10  # num of iter per epoch for policy train
-    collect_per_step = 1  # num of eps per iter for policy train
-    repeat_per_collect = 2  # repeat train
-    batch_size = 64  # meaningless
+from mytest.net import MTN
+from mytest.env import create_MTLEnv, MTLEnv
+from mytest.datautil import read_data_from_file, MTDataset
 
 
 def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs):
@@ -49,16 +23,22 @@ def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs):
     feature_dim = data.shape[-1]
     databatcher = MTDataset(data, label, task_interval, num_class, EnvArgs.size_task_class)
     env_net = MTN(feature_dim, EnvArgs.hidden_dim, num_class, num_task)
-    train_envs = create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn)
-    test_envs = create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn)
+
+    train_envs = SubprocVectorEnv(
+        [lambda: create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn) for _ in
+         range(TrainArgs.training_num)])
+    test_envs = SubprocVectorEnv(
+        [lambda: create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn) for _ in
+         range(TrainArgs.test_num)])
 
     np.random.seed(TrainArgs.seed)
     torch.manual_seed(TrainArgs.seed)
     train_envs.seed(TrainArgs.seed)
     test_envs.seed(TrainArgs.seed)
 
-    state_shape = train_envs.observation_space.shape or train_envs.observation_space.n
-    action_shape = train_envs.action_space.shape or train_envs.action_space.n
+    env = create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn)
+    state_shape = env.observation_space.shape or env.observation_space.n
+    action_shape = env.action_space.shape or env.action_space.n
     net = Net(TrainArgs.layer_num, state_shape)
     actor = Actor(net, action_shape)
     critic = Critic(net)
@@ -74,10 +54,8 @@ def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs):
         ent_coef=PPOArgs.ent_coef,
         action_range=None)
 
-    train_collector = Collector(
-        policy, train_envs, ReplayBuffer(TrainArgs.buffer_size),
-        preprocess_fn=None)
-    test_collector = Collector(policy, test_envs, preprocess_fn=None)
+    train_collector = Collector(policy, train_envs, ReplayBuffer(TrainArgs.buffer_size))
+    test_collector = Collector(policy, test_envs, ReplayBuffer(TrainArgs.buffer_size))
 
     writer = SummaryWriter(os.path.join(TrainArgs.logdir, 'MTL', 'ppo'))
 

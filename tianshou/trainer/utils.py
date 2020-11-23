@@ -27,10 +27,34 @@ def test_episode(
         n_ = np.zeros(n) + n_episode // n
         n_[:n_episode % n] += 1
         n_episode = list(n_)
+    count_eps = [0 for _ in range(collector.env_num)]
+    count_stp = [0 for _ in range(collector.env_num)]
     result = collector.collect(n_episode=n_episode)
+    if writer:
+        info = collector.buffer.info
+        for l in range(len(collector.buffer)):
+            tag = f'test-MTLEnv/epoch{epoch}/env{info.env_id[l]}/num{count_eps[info.env_id[l]]}'
+            ite = info.iter[l]
+            action = {}
+            coes = {}
+            for t in range(info.num_task[l]):
+                action[f'task{t}'] = info.action[l, t]
+                coes[f'task{t}'] = info.coes[l, t]
+            writer.add_scalars(tag + '/action', action, count_stp[info.env_id[l]])
+            writer.add_scalars(tag + '/coe', action, count_stp[info.env_id[l]])
+            for i in range(len(ite)):
+                loss = {}
+                for t in range(info.num_task[l]):
+                    loss[f'task{t}'] = info.losses[l, t, i]
+                writer.add_scalars(tag + '/loss', loss, ite[i])
+            count_stp[info.env_id[l]] += 1
+            if collector.buffer.done[l]:
+                count_eps[info.env_id[l]] += 1
+                count_stp[info.env_id[l]] = 0
+    collector.reset_buffer()
     if writer is not None and global_step is not None:
         for k in result.keys():
-            writer.add_scalar("test/" + k, result[k], global_step=global_step)
+            writer.add_scalar("test-policy/" + k, result[k], global_step=global_step)
     return result
 
 

@@ -102,7 +102,7 @@ def onpolicy_trainer(
                 if writer and env_step % log_interval == 0:
                     for k in result.keys():
                         writer.add_scalar(
-                            "train/" + k, result[k], global_step=env_step)
+                            "train-env/" + k, result[k], global_step=env_step)
                 if test_in_train and stop_fn and stop_fn(result["rew"]):
                     test_result = test_episode(
                         policy, test_collector, test_fn,
@@ -121,6 +121,9 @@ def onpolicy_trainer(
                 losses = policy.update(
                     0, train_collector.buffer,
                     batch_size=batch_size, repeat=repeat_per_collect)
+                # print(losses)
+                # print(train_collector.buffer.info[:len(train_collector.buffer)])
+                # assert False
                 train_collector.reset_buffer()
                 step = max([1] + [
                     len(v) for v in losses.values() if isinstance(v, list)])
@@ -132,7 +135,7 @@ def onpolicy_trainer(
                     data[k] = f"{stat[k].get():.6f}"
                     if writer and gradient_step % log_interval == 0:
                         writer.add_scalar(
-                            k, stat[k].get(), global_step=gradient_step)
+                            'train-policy/' + k, stat[k].get(), global_step=gradient_step)
                 t.update(step)
                 t.set_postfix(**data)
             if t.n <= t.total:
