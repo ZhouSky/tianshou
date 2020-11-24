@@ -12,14 +12,20 @@ from mytest.train import train_base, train_RMTL, train_RLPolicy
 from mytest.arg import PPOArgs, EnvArgs, TrainArgs
 
 
+# def reward_fn(info):
+#     if not info.get('losses'):
+#         return 0
+#     array = np.asanyarray(info['losses'])
+#     half = array.shape[-1] // 2
+#     start_losses = array[:, :half].mean(axis=-1)
+#     end_losses = array[:, half:].mean(axis=-1)
+#     return start_losses.std() - end_losses.std()
+
 def reward_fn(info):
     if not info.get('losses'):
         return 0
     array = np.asanyarray(info['losses'])
-    half = array.shape[-1] // 2
-    start_losses = array[:, :half].mean(axis=-1)
-    end_losses = array[:, half:].mean(axis=-1)
-    return start_losses.std() - end_losses.std()
+    return 1 / array.mean(axis=-1).max()
 
 
 def state_fn(info):

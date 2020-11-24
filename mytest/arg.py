@@ -25,12 +25,12 @@ class TrainArgs:
     lr = 1e-3
     layer_num = 1
     seed = 0
-    training_num = 4
-    test_num = 4
-    buffer_size = 256
+    training_num = 8
+    test_num = 8
+    buffer_size = 512
     logdir = 'log'
     epoch = 15  # each epoch will test policy once
-    step_per_epoch = 400  # num of policy-training per epoch for policy train
-    collect_per_step = 2  # num of eps per iter for policy train
+    step_per_epoch = 80  # num of policy-training per epoch for policy train
+    collect_per_step = 8  # num of eps per iter for policy train
     repeat_per_collect = 2  # repeat train
     batch_size = 50  # num of step-data per policy-training
