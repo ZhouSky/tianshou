@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
@@ -12,7 +13,7 @@ from tianshou.data import Collector, ReplayBuffer, Batch
 from tianshou.utils.net.discrete import Actor, Critic
 from tianshou.utils.net.common import Net
 
-from mytest.net import MTN
+from mytest.net import MTN, EDN, STNS
 from mytest.env import create_MTLEnv, MTLEnv
 from mytest.datautil import read_data_from_file, MTDataset
 
@@ -42,6 +43,7 @@ def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs, discrete=True):
     del env
 
     net = Net(TrainArgs.layer_num, state_shape)
+    actor_post = nn.Linear()
     actor = Actor(net, action_shape, discrete=discrete)
     if discrete:
         dist = torch.distributions.Categorical
@@ -80,7 +82,8 @@ def train_RMTL(env, policy, max_epoch, writer):
     print('-----Start train MTL net-----')
     if isinstance(env, MTLEnv):
         env = DummyVectorEnv([lambda: env])
-    env.workers[0].env.max_iter = env.workers[0].env.max_iter_epoch * max_epoch
+        inner_env = env.workers[0].env
+    inner_env.max_iter = inner_env.max_iter_epoch * max_epoch
     data = Batch(state={}, obs={}, act={}, rew={}, done={}, info={}, obs_next={}, policy={})
     data.obs = env.reset()
     done = False
@@ -91,8 +94,8 @@ def train_RMTL(env, policy, max_epoch, writer):
         info = info[0]
         losses = np.asarray(info['losses'])
         for ind, ite in enumerate(info['iter']):
-            if ite % env.workers[0].env.max_iter_epoch == 0:
-                epoch = ite // env.workers[0].env.max_iter_epoch
+            if ite % inner_env.max_iter_epoch == 0:
+                epoch = ite // inner_env.max_iter_epoch
                 # print('Epoch %d, Iter: %d, Reward: %f, loss: %s' % (
                 #     epoch, ite, rew, losses[:, ind]))
                 loss = {}
@@ -107,7 +110,7 @@ def train_RMTL(env, policy, max_epoch, writer):
                 writer.add_scalars(tag + '/coes', coes, epoch)
                 writer.add_scalar(tag + '/reward', rew, epoch)
     print('-----End train MTL net-----')
-    return env.workers[0].env.env_net
+    return inner_env.env_net
 
 
 def train_base(model, databatcher, criterion, optimizer, max_epoch):
@@ -117,21 +120,20 @@ def train_base(model, databatcher, criterion, optimizer, max_epoch):
     base = databatcher.num_class * databatcher.batch_size
     for iter in range(max_iter_epoch * max_epoch):
         sampled_data, sampled_label, _, _ = databatcher.get_next_batch()
-        num_epoch = iter // max_iter_epoch
+        sampled_data = torch.from_numpy(sampled_data)
+        sampled_label = torch.from_numpy(np.asarray(sampled_label == 1).nonzero()[-1])
+
         outputs = []
         for t in range(databatcher.num_task):
             output = model(torch.from_numpy(sampled_data[t * base: (t + 1) * base, :]), t)
             outputs.append(output)
         output = torch.cat(outputs, 0)
 
-        sampled_label = torch.tensor(
-            [np.where(sampled_label[_] == 1)[0][0] for _ in range(sampled_label.shape[0])]
-        )
-
         loss = criterion(output, sampled_label) * databatcher.num_task
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
+        num_epoch = iter // max_iter_epoch
         if iter % max_iter_epoch == 0:
             print("Epoch %d, Iter %d, training loss %g" % (num_epoch, iter, loss))

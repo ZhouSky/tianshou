@@ -72,15 +72,19 @@ class MTLEnv(gym.Env):
         if self.done:
             raise ValueError('step after done !!!')
 
+        coes = []
         if self.discrete:
             self.info['action'] = [self.coe_mul[(action % 3 ** (i + 1)) // (3 ** i)] for i in range(self.info['num_task'])]
         else:
             self.info['action'] = action
         for i in range(self.info['num_task']):
-            self.coes[i] *= self.info['action'][i]
-            self.coes[i] = max(self.coe_clip[0], min(self.coe_clip[1], self.coes[i]))
+            coes.append(max(self.coe_clip[0], min(self.coe_clip[1], self.coes[i] * self.info['action'][i])))
+            if self.discrete:
+                self.coes[i] = coes[i]
+            # self.coes[i] *= self.info['action'][i]
+            # self.coes[i] = max(self.coe_clip[0], min(self.coe_clip[1], self.coes[i]))
 
-        self.info['coes'] = self.coes
+        self.info['coes'] = coes
         self.info['losses'] = [[] for _ in range(self.env_net.num_task)]
         self.info['iter'] = []
         base = self.env_net.num_class * self.data_batcher.batch_size
@@ -98,7 +102,7 @@ class MTLEnv(gym.Env):
 
             self.optimizer.zero_grad()
             obj = 0
-            for c, l in zip(self.coes, losses):
+            for c, l in zip(coes, losses):
                 obj += c * l
             obj.backward()
             self.optimizer.step()

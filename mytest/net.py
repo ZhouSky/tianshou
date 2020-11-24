@@ -9,6 +9,7 @@ class BaseNet(nn.Module, ABC):
     @staticmethod
     def seed(seed=0):
         np.random.seed(seed)
+        torch.manual_seed(seed)
         return [seed]
 
     def reset(self, std=1e-3):
@@ -60,4 +61,16 @@ class MTN(BaseNet):
         out = self.task_models[task_index](out)
         if softmax:
             out = F.softmax(out, dim=-1)
+        return out
+
+
+class EDN(BaseNet):
+    def __init__(self, pre, post):
+        super(EDN, self).__init__()
+        self.pre = pre
+        self.post = post
+
+    def forward(self, x):
+        out = self.pre(x)
+        out = self.post(x)
         return out

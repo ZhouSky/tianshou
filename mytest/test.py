@@ -21,21 +21,11 @@ from mytest.arg import PPOArgs, EnvArgs, TrainArgs
 #     end_losses = array[:, half:].mean(axis=-1)
 #     return start_losses.std() - end_losses.std()
 
-
-# def reward_fn(info):
-#     if not info.get('losses'):
-#         return 0
-#     array = np.asanyarray(info['losses'])
-#     half = array.shape[-1] // 2
-#     start_losses = array[:, :half].mean(axis=-1)
-#     end_losses = array[:, half:].mean(axis=-1)
-#     return start_losses.std() - end_losses.std()
-
 def reward_fn(info):
     if not info.get('losses'):
         return 0
     array = np.asanyarray(info['losses'])
-    return 1 / array.mean(axis=-1).max()
+    return 1 / np.exp(array.mean(axis=-1).max())
 
 
 def state_fn(info):
@@ -54,8 +44,9 @@ def test_RMTL():
     env_net = MTN(feature_dim, args.hidden_dim, num_class, num_task)
     env = create_MTLEnv(env_net, args, trainbatcher, reward_fn, state_fn, discrete)
     writer = SummaryWriter(os.path.join(TrainArgs.logdir, 'MTL', 'mtl'))
-    net = train_RMTL(env, policy, 500, writer)
+    net = train_RMTL(env, policy, 400, writer)
     return net
+
 
 def test_STL():
     net = STNS(feature_dim, args.hidden_dim, num_class, num_task)
@@ -63,6 +54,7 @@ def test_STL():
     optimizer = optim.Adam(net.parameters(), args.lr)
     train_base(net, trainbatcher, criterion, optimizer, 200)
     return net
+
 
 def test_MTL():
     net = MTN(feature_dim, args.hidden_dim, num_class, num_task)
