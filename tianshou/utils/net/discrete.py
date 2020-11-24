@@ -20,12 +20,17 @@ class Actor(nn.Module):
         action_shape: Sequence[int],
         hidden_layer_size: int = 128,
         softmax_output: bool = True,
+        discrete: bool = True
     ) -> None:
         super().__init__()
         self.preprocess = preprocess_net
         # print(hidden_layer_size, action_shape)
-        self.last = nn.Linear(hidden_layer_size, np.prod(action_shape))
+        if discrete:
+            self.last = nn.Linear(hidden_layer_size, np.prod(action_shape))
+        else:
+            self.last = nn.Linear(hidden_layer_size, np.prod(action_shape) * 2)
         self.softmax_output = softmax_output
+        self.discrete = discrete
 
     def forward(
         self,
@@ -38,6 +43,8 @@ class Actor(nn.Module):
         logits = self.last(logits)
         if self.softmax_output:
             logits = F.softmax(logits, dim=-1)
+        if not self.discrete:
+            logits = (logits[:, ::2], logits[:, 1::2])
         return logits, h
 
 
