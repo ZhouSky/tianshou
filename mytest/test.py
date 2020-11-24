@@ -4,7 +4,7 @@ import torch.optim as optim
 import os
 from torch.utils.tensorboard import SummaryWriter
 
-from mytest.env import EnvArgs, create_MTLEnv
+from mytest.env import create_MTLEnv
 from mytest.net import MTN, STNS
 from mytest.datautil import read_data_from_file, MTDataset, MTDataset_Split
 from mytest.testutil import test_net
@@ -12,14 +12,21 @@ from mytest.train import train_base, train_RMTL, train_RLPolicy
 from mytest.arg import PPOArgs, EnvArgs, TrainArgs
 
 
+# def reward_fn(info):
+#     if not info.get('losses'):
+#         return 0
+#     array = np.asanyarray(info['losses'])
+#     half = array.shape[-1] // 2
+#     start_losses = array[:, :half].mean(axis=-1)
+#     end_losses = array[:, half:].mean(axis=-1)
+#     return start_losses.std() - end_losses.std()
+
+
 def reward_fn(info):
     if not info.get('losses'):
         return 0
     array = np.asanyarray(info['losses'])
-    half = array.shape[-1] // 2
-    start_losses = array[:, :half].mean(axis=-1)
-    end_losses = array[:, half:].mean(axis=-1)
-    return start_losses.std() - end_losses.std()
+    return 1 / array.mean(axis=-1).max()
 
 
 def state_fn(info):
@@ -33,9 +40,10 @@ def state_fn(info):
 
 
 def test_RMTL():
-    policy = train_RLPolicy(args, TrainArgs, PPOArgs)
+    discrete = False
+    policy = train_RLPolicy(args, TrainArgs, PPOArgs, discrete)
     env_net = MTN(feature_dim, args.hidden_dim, num_class, num_task)
-    env = create_MTLEnv(env_net, args, trainbatcher, reward_fn, state_fn)
+    env = create_MTLEnv(env_net, args, trainbatcher, reward_fn, state_fn, discrete)
     writer = SummaryWriter(os.path.join(TrainArgs.logdir, 'MTL', 'mtl'))
     net = train_RMTL(env, policy, 500, writer)
     return net

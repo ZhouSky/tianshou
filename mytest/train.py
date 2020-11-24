@@ -17,7 +17,7 @@ from mytest.env import create_MTLEnv, MTLEnv
 from mytest.datautil import read_data_from_file, MTDataset
 
 
-def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs):
+def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs, discrete=True):
     print('-----Start train RL policy-----')
     data, label, task_interval, num_task, num_class = read_data_from_file(EnvArgs.data_path)
     feature_dim = data.shape[-1]
@@ -25,10 +25,10 @@ def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs):
     env_net = MTN(feature_dim, EnvArgs.hidden_dim, num_class, num_task)
 
     train_envs = SubprocVectorEnv(
-        [lambda: create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn) for _ in
+        [lambda: create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn, discrete) for _ in
          range(TrainArgs.training_num)])
     test_envs = SubprocVectorEnv(
-        [lambda: create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn) for _ in
+        [lambda: create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn, discrete) for _ in
          range(TrainArgs.test_num)])
 
     np.random.seed(TrainArgs.seed)
@@ -36,15 +36,22 @@ def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs):
     train_envs.seed(TrainArgs.seed)
     test_envs.seed(TrainArgs.seed)
 
-    env = create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn)
+    env = create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn, discrete)
     state_shape = env.observation_space.shape or env.observation_space.n
     action_shape = env.action_space.shape or env.action_space.n
+    del env
+
     net = Net(TrainArgs.layer_num, state_shape)
-    actor = Actor(net, action_shape)
+    actor = Actor(net, action_shape, discrete=discrete)
+    if discrete:
+        dist = torch.distributions.Categorical
+    else:
+        dist = torch.distributions.normal.Normal
+
     critic = Critic(net)
     optimizer_rl = torch.optim.Adam(set(list(
         actor.parameters()) + list(critic.parameters())), lr=TrainArgs.lr)
-    dist = torch.distributions.Categorical
+
 
     policy = PPOPolicy(
         actor, critic, optimizer_rl, dist, PPOArgs.gamma,

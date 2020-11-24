@@ -13,11 +13,13 @@ from mytest.arg import EnvArgs
 
 
 class MTLEnv(gym.Env):
-    def __init__(self, env_net: nn.Module, optimizer: optim, criterion, data_batcher, iter_step: int, max_iter: int, reward_fn, state_fn):
+    def __init__(self, env_net: nn.Module, optimizer: optim, criterion, data_batcher, iter_step: int, max_iter: int,
+                 reward_fn, state_fn, discrete=True):
         self.env_net = env_net
         self.optimizer = optimizer
         self.criterion = criterion
         self.data_batcher = data_batcher
+        self.discrete = discrete
 
         self.iter_step = iter_step
         self.max_iter = max_iter
@@ -34,10 +36,12 @@ class MTLEnv(gym.Env):
 
         self.coes = np.ones((env_net.num_task,))
         self.coe_clip = (0.01, 100)
-        self.coe_mul = (0.99, 1.0, 1.01)
+        if self.discrete:
+            self.coe_mul = (0.99, 1.0, 1.01)
 
         self.observation_space = Box(shape=(env_net.num_task,), low=0, high=1)
-        self.action_space = Discrete(len(self.coe_mul)**env_net.num_task)
+        self.action_space = Discrete(len(self.coe_mul) ** env_net.num_task) if self.discrete else Box(
+            shape=(env_net.num_task,), low=self.coe_clip[0], high=self.coe_clip[1])
 
         self.seed()
 
@@ -68,10 +72,14 @@ class MTLEnv(gym.Env):
         if self.done:
             raise ValueError('step after done !!!')
 
-        self.info['action'] = [self.coe_mul[(action % 3**(i + 1)) // (3**i)] for i in range(self.info['num_task'])]
+        if self.discrete:
+            self.info['action'] = [self.coe_mul[(action % 3 ** (i + 1)) // (3 ** i)] for i in range(self.info['num_task'])]
+        else:
+            self.info['action'] = action
         for i in range(self.info['num_task']):
             self.coes[i] *= self.info['action'][i]
             self.coes[i] = max(self.coe_clip[0], min(self.coe_clip[1], self.coes[i]))
+
         self.info['coes'] = self.coes
         self.info['losses'] = [[] for _ in range(self.env_net.num_task)]
         self.info['iter'] = []
@@ -84,7 +92,7 @@ class MTLEnv(gym.Env):
             losses = []
             for t in range(self.env_net.num_task):
                 output = self.env_net(sampled_data[t * base: (t + 1) * base, :, ], t)
-                loss = self.criterion(output, sampled_label[t * base: (t + 1) * base],)
+                loss = self.criterion(output, sampled_label[t * base: (t + 1) * base])
                 losses.append(loss)
                 self.info['losses'][t].append(loss.item())
 
@@ -104,10 +112,10 @@ class MTLEnv(gym.Env):
         return self._get_state(), self._get_reward(), self.done, self.info
 
 
-def create_MTLEnv(env_net, args, databatcher, reward_fn, state_fn):
+def create_MTLEnv(env_net, args, databatcher, reward_fn, state_fn, discrete=True):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(env_net.parameters(), args.lr)
-    env = MTLEnv(env_net, optimizer, criterion, databatcher, args.iter_step, args.max_iter, reward_fn, state_fn)
+    env = MTLEnv(env_net, optimizer, criterion, databatcher, args.iter_step, args.max_iter, reward_fn, state_fn, discrete)
     return env
 
 
