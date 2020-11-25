@@ -178,19 +178,9 @@ def read_data_from_file(filename):
     file.close()
     num_task = int(contents[0])
     num_class = int(contents[1])
-    temp_ind = re.split(",", contents[2])
-    temp_ind = [int(elem) for elem in temp_ind]
-    task_interval = np.array(temp_ind)
-    temp_data = []
-    for pos in range(3, len(contents) - 1):
-        temp_sub_data = re.split(",", contents[pos])
-        temp_sub_data = [float(elem) for elem in temp_sub_data]
-        temp_data.append(temp_sub_data)
-    data = np.array(temp_data)
-    temp_label = re.split(",", contents[-1])
-    temp_label = [int(elem) for elem in temp_label]
-    # 1*2529,样本数
-    label = np.reshape(np.array(temp_label), [1, -1])
+    task_interval = np.array(list(map(int, re.split(",", contents[2]))))
+    data = np.array([list(map(float, re.split(',', contents[pos]))) for pos in range(3, len(contents) - 1)])
+    label = np.array(list(map(int, re.split(',', contents[-1])))).ravel()
     return data, label, task_interval, num_task, num_class
 
 

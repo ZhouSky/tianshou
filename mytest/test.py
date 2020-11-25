@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import os
 from torch.utils.tensorboard import SummaryWriter
+from pprint import pprint
 
 from mytest.env import create_MTLEnv
 from mytest.net import MTN, STNS
@@ -69,6 +70,7 @@ if __name__ == '__main__':
     args = EnvArgs(reward_fn, state_fn)
 
     data, label, task_interval, num_task, num_class = read_data_from_file(args.data_path)
+
     feature_dim = data.shape[-1]
     data_split = MTDataset_Split(data, label, task_interval, num_class)
     (
