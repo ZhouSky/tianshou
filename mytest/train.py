@@ -113,23 +113,30 @@ def train_RMTL(env, policy, max_epoch, writer):
     return inner_env.env_net
 
 
-def train_base(model, databatcher, criterion, optimizer, max_epoch):
+def train_base(model, databatcher, criterion, optimizer, max_epoch, writer):
     max_iter_epoch = np.ceil(
         databatcher.data.shape[0] / (databatcher.batch_size * databatcher.num_task * databatcher.num_class)
     ).astype(np.int32)
     base = databatcher.num_class * databatcher.batch_size
+    tag = 'MTL-base'
     for iter in range(max_iter_epoch * max_epoch):
         sampled_data, sampled_label, _, _ = databatcher.get_next_batch()
         sampled_data = torch.from_numpy(sampled_data)
         sampled_label = torch.from_numpy(np.asarray(sampled_label == 1).nonzero()[-1])
 
-        outputs = []
+        # outputs = []
+        losses = []
         for t in range(databatcher.num_task):
-            output = model(torch.from_numpy(sampled_data[t * base: (t + 1) * base, :]), t)
-            outputs.append(output)
-        output = torch.cat(outputs, 0)
+            output = model(sampled_data[t * base: (t + 1) * base, :], t)
+            loss = criterion(output, sampled_label[t * base: (t + 1) * base])
+            losses.append(loss)
+            # outputs.append(output)
+        # output = torch.cat(outputs, 0)
+        loss = 0
+        for l in losses:
+            loss += l
 
-        loss = criterion(output, sampled_label) * databatcher.num_task
+        # loss = criterion(output, sampled_label) #* databatcher.num_task
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -137,3 +144,7 @@ def train_base(model, databatcher, criterion, optimizer, max_epoch):
         num_epoch = iter // max_iter_epoch
         if iter % max_iter_epoch == 0:
             print("Epoch %d, Iter %d, training loss %g" % (num_epoch, iter, loss))
+            loss = {}
+            for i, l in enumerate(losses):
+                loss[f'task{i}'] = l
+            writer.add_scalars(tag + '/loss', loss, num_epoch)

@@ -60,7 +60,8 @@ def test_MTL():
     net = MTN(feature_dim, args.hidden_dim, num_class, num_task)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), args.lr)
-    train_base(net, trainbatcher, criterion, optimizer, 200)
+    writer = SummaryWriter(os.path.join(TrainArgs.logdir, 'MTL', 'base'))
+    train_base(net, trainbatcher, criterion, optimizer, 400, writer)
     return net
 
 
@@ -82,9 +83,9 @@ if __name__ == '__main__':
         traindata, trainlabel, train_task_interval, num_class, args.size_task_class
     )
 
-    model = test_RMTL()
+    # model = test_RMTL()
     # model = test_STL()
-    # model = test_MTL()
+    model = test_MTL()
 
     error = test_net(model, testdata, testlabel, test_task_interval)
     print(error)
