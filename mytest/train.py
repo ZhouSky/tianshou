@@ -18,18 +18,16 @@ from mytest.env import create_MTLEnv, MTLEnv
 from mytest.datautil import read_data_from_file, MTDataset
 
 
-def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs, discrete=True):
+def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs, discrete=True, device=torch.device('cpu')):
     print('-----Start train RL policy-----')
     data, label, task_interval, num_task, num_class = read_data_from_file(EnvArgs.data_path)
-    feature_dim = data.shape[-1]
     databatcher = MTDataset(data, label, task_interval, num_class, EnvArgs.size_task_class)
-    env_net = MTN(feature_dim, EnvArgs.hidden_dim, num_class, num_task)
 
     train_envs = SubprocVectorEnv(
-        [lambda: create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn, discrete) for _ in
+        [lambda: create_MTLEnv(databatcher.copy(), EnvArgs, EnvArgs.reward_fn, EnvArgs.state_fn, discrete, device) for _ in
          range(TrainArgs.training_num)])
     test_envs = SubprocVectorEnv(
-        [lambda: create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn, discrete) for _ in
+        [lambda: create_MTLEnv(databatcher.copy(), EnvArgs, EnvArgs.reward_fn, EnvArgs.state_fn, discrete, device) for _ in
          range(TrainArgs.test_num)])
 
     np.random.seed(TrainArgs.seed)
@@ -37,23 +35,21 @@ def train_RLPolicy(EnvArgs, TrainArgs, PPOArgs, discrete=True):
     train_envs.seed(TrainArgs.seed)
     test_envs.seed(TrainArgs.seed)
 
-    env = create_MTLEnv(env_net, EnvArgs, databatcher, EnvArgs.reward_fn, EnvArgs.state_fn, discrete)
+    env = create_MTLEnv(databatcher, EnvArgs, EnvArgs.reward_fn, EnvArgs.state_fn, discrete, device)
     state_shape = env.observation_space.shape or env.observation_space.n
     action_shape = env.action_space.shape or env.action_space.n
     del env
 
-    net = Net(TrainArgs.layer_num, state_shape)
-    actor_post = nn.Linear()
-    actor = Actor(net, action_shape, discrete=discrete)
+    net = Net(TrainArgs.layer_num, state_shape, device=device)
+    # actor_post = nn.Linear()
+    actor = Actor(net, action_shape, discrete=discrete).to(device)
     if discrete:
         dist = torch.distributions.Categorical
     else:
         dist = torch.distributions.normal.Normal
-
-    critic = Critic(net)
+    critic = Critic(net).to(device)
     optimizer_rl = torch.optim.Adam(set(list(
         actor.parameters()) + list(critic.parameters())), lr=TrainArgs.lr)
-
 
     policy = PPOPolicy(
         actor, critic, optimizer_rl, dist, PPOArgs.gamma,
@@ -83,11 +79,11 @@ def train_RMTL(env, policy, max_epoch, writer):
     if isinstance(env, MTLEnv):
         env = DummyVectorEnv([lambda: env])
         inner_env = env.workers[0].env
-    inner_env.max_iter = inner_env.max_iter_epoch * max_epoch
+    inner_env.setMaxEpoch(max_epoch)
     data = Batch(state={}, obs={}, act={}, rew={}, done={}, info={}, obs_next={}, policy={})
     data.obs = env.reset()
     done = False
-    tag = 'train-MTL'
+    tag = 'train-RMTL'
     while not done:
         action = policy(data).act
         data.obs, rew, done, info = env.step(action)
@@ -113,16 +109,14 @@ def train_RMTL(env, policy, max_epoch, writer):
     return inner_env.env_net
 
 
-def train_base(model, databatcher, criterion, optimizer, max_epoch, writer):
-    max_iter_epoch = np.ceil(
-        databatcher.data.shape[0] / (databatcher.batch_size * databatcher.num_task * databatcher.num_class)
-    ).astype(np.int32)
+def train_base(model, databatcher, criterion, optimizer, max_epoch, writer=None, device=torch.device('cpu')):
     base = databatcher.num_class * databatcher.batch_size
-    tag = 'MTL-base'
+    max_iter_epoch = np.ceil(databatcher.data.shape[0] / (base * databatcher.num_task)).astype(np.int32)
+    tag = ''
     for iter in range(max_iter_epoch * max_epoch):
         sampled_data, sampled_label, _, _ = databatcher.get_next_batch()
-        sampled_data = torch.from_numpy(sampled_data)
-        sampled_label = torch.from_numpy(np.asarray(sampled_label == 1).nonzero()[-1])
+        sampled_data = torch.from_numpy(sampled_data).to(device)
+        sampled_label = torch.from_numpy(np.asarray(sampled_label == 1).nonzero()[-1]).to(device)
 
         # outputs = []
         losses = []
@@ -147,4 +141,4 @@ def train_base(model, databatcher, criterion, optimizer, max_epoch, writer):
             loss = {}
             for i, l in enumerate(losses):
                 loss[f'task{i}'] = l
-            writer.add_scalars(tag + '/loss', loss, num_epoch)
+            writer.add_scalars('loss', loss, num_epoch)

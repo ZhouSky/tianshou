@@ -2,6 +2,7 @@ import time
 import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from typing import Dict, List, Union, Callable, Optional
+from pprint import pprint
 
 from tianshou.data import Collector
 from tianshou.policy import BasePolicy
@@ -89,6 +90,7 @@ def onpolicy_trainer(
                 if train_fn:
                     train_fn(epoch, env_step)
                 result = train_collector.collect(n_episode=collect_per_step)
+                # pprint(result)
                 env_step += int(result["n/st"])
                 data = {
                     "env_step": str(env_step),
@@ -99,43 +101,49 @@ def onpolicy_trainer(
                     "v/ep": f"{result['v/ep']:.2f}",
                     "v/st": f"{result['v/st']:.2f}",
                 }
+                # print(result)
                 if writer and env_step % log_interval == 0:
                     for k in result.keys():
-                        writer.add_scalar(
-                            "train-env/" + k, result[k], global_step=env_step)
-                if test_in_train and stop_fn and stop_fn(result["rew"]):
-                    test_result = test_episode(
-                        policy, test_collector, test_fn,
-                        epoch, episode_per_test, writer, env_step)
-                    if stop_fn(test_result["rew"]):
-                        if save_fn:
-                            save_fn(policy)
-                        for k in result.keys():
-                            data[k] = f"{result[k]:.2f}"
-                        t.set_postfix(**data)
-                        return gather_info(
-                            start_time, train_collector, test_collector,
-                            test_result["rew"], test_result["rew_std"])
-                    else:
-                        policy.train()
+                        # print(result[k], env_step)
+                        writer.add_scalar("train-env/" + k, result[k], global_step=env_step)
+                # if test_in_train and stop_fn and stop_fn(result["rew"]):
+                #     test_result = test_episode(
+                #         policy, test_collector, test_fn,
+                #         epoch, episode_per_test, writer, env_step)
+                #     if stop_fn(test_result["rew"]):
+                #         if save_fn:
+                #             save_fn(policy)
+                #         for k in result.keys():
+                #             data[k] = f"{result[k]:.2f}"
+                #         t.set_postfix(**data)
+                #         return gather_info(
+                #             start_time, train_collector, test_collector,
+                #             test_result["rew"], test_result["rew_std"])
+                #     else:
+                #         policy.train()
+                # print(len(train_collector.buffer))
                 losses = policy.update(
                     0, train_collector.buffer,
                     batch_size=batch_size, repeat=repeat_per_collect)
-                # print(losses)
+                # print(len(losses['loss']))
+                # assert False
                 # print(train_collector.buffer.info[:len(train_collector.buffer)])
                 # assert False
                 train_collector.reset_buffer()
                 step = max([1] + [
                     len(v) for v in losses.values() if isinstance(v, list)])
                 gradient_step += step
+                # pprint(losses)
+                # pprint(stat)
                 for k in losses.keys():
                     if stat.get(k) is None:
                         stat[k] = MovAvg()
                     stat[k].add(losses[k])
                     data[k] = f"{stat[k].get():.6f}"
                     if writer and gradient_step % log_interval == 0:
-                        writer.add_scalar(
-                            'train-policy/' + k, stat[k].get(), global_step=gradient_step)
+                        # print(k, stat[k].get(), gradient_step)
+                        writer.add_scalar('train-policy/' + k, stat[k].get(), global_step=gradient_step)
+                # assert False
                 t.update(step)
                 t.set_postfix(**data)
             if t.n <= t.total:

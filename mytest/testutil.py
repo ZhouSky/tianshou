@@ -22,20 +22,17 @@ def compute_errors(output, task_ind, label, num_task):
     return errors
 
 
-def test_net(net, testdata, testlabel, test_task_interval):
+def test_net(net, testdata, testlabel, test_task_interval, device=torch.device('cpu')):
     task_ind = generate_task_index(test_task_interval)
     outputs = []
     with torch.no_grad():
         for a in range(testdata.shape[0]):
             outputs.append(
-                net(
-                    torch.tensor(testdata[a], dtype=torch.float),
-                    task_ind[a],
-                )
+                net(torch.tensor(testdata[a], dtype=torch.float, device=device), task_ind[a])
             )
         output = torch.stack(outputs, 0)
         test_error = compute_errors(
-            output.numpy(), task_ind, testlabel, test_task_interval.size - 1
+            output.cpu().numpy(), task_ind, testlabel, test_task_interval.size - 1
         )
 
         return test_error

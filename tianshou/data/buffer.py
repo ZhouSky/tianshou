@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from numbers import Number
 from typing import Any, Dict, List, Tuple, Union, Optional
+from pprint import pprint
 
 from tianshou.data import Batch, SegmentTree, to_numpy
 from tianshou.data.batch import _create_value
@@ -204,6 +205,8 @@ class ReplayBuffer:
         i = begin = buffer._index % len(buffer)
         stack_num_orig = buffer.stack_num
         buffer.stack_num = 1
+        # pprint(self)
+        # pprint(buffer)
         while True:
             self.add(**buffer[i])  # type: ignore
             i = (i + 1) % len(buffer)

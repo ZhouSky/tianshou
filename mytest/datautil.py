@@ -14,6 +14,9 @@ class MTDataset:
         self.batch_size = batch_size
         self.__build_index__()
 
+    def copy(self):
+        return MTDataset(self.data, self.label, self.task_interval, self.num_class, self.batch_size)
+
     def __build_index__(self):
         index_list = []
         for i in range(self.num_task):

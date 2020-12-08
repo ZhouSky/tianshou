@@ -27,8 +27,8 @@ def get_args():
     parser.add_argument('--repeat-per-collect', type=int, default=2)
     parser.add_argument('--batch-size', type=int, default=64)
     parser.add_argument('--layer-num', type=int, default=1)
-    parser.add_argument('--training-num', type=int, default=20)
-    parser.add_argument('--test-num', type=int, default=100)
+    parser.add_argument('--training-num', type=int, default=2)
+    parser.add_argument('--test-num', type=int, default=2)
     parser.add_argument('--logdir', type=str, default='log')
     parser.add_argument('--render', type=float, default=0.)
     parser.add_argument(
@@ -48,7 +48,7 @@ def get_args():
 
 
 def test_ppo(args=get_args()):
-    torch.set_num_threads(1)  # for poor CPU
+    torch.set_num_threads(2)  # for poor CPU
     env = gym.make(args.task)
     args.state_shape = env.observation_space.shape or env.observation_space.n
     args.action_shape = env.action_space.shape or env.action_space.n
@@ -68,6 +68,7 @@ def test_ppo(args=get_args()):
     net = Net(args.layer_num, args.state_shape, device=args.device)
     actor = Actor(net, args.action_shape).to(args.device)
     critic = Critic(net).to(args.device)
+    del net
     # orthogonal initialization
     for m in list(actor.modules()) + list(critic.modules()):
         if isinstance(m, torch.nn.Linear):
@@ -109,7 +110,7 @@ def test_ppo(args=get_args()):
         writer=writer)
     assert stop_fn(result['best_reward'])
     if __name__ == '__main__':
-        pprint.pprint(result)
+        # pprint.pprint(result)
         # Let's watch its performance!
         env = gym.make(args.task)
         policy.eval()
@@ -120,3 +121,4 @@ def test_ppo(args=get_args()):
 
 if __name__ == '__main__':
     test_ppo()
+

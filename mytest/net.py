@@ -14,8 +14,9 @@ class BaseNet(nn.Module, ABC):
 
     def reset(self, std=1e-3):
         for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, std=std)
+            if isinstance(m, torch.nn.Linear):
+                torch.nn.init.orthogonal_(m.weight)
+                torch.nn.init.zeros_(m.bias)
 
 
 class STNS(BaseNet):
@@ -72,5 +73,5 @@ class EDN(BaseNet):
 
     def forward(self, x):
         out = self.pre(x)
-        out = self.post(x)
+        out = self.post(out)
         return out

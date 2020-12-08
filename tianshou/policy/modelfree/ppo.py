@@ -157,6 +157,7 @@ class PPOPolicy(PGPolicy):
                 dist = self(b).dist
                 value = self.critic(b.obs).flatten()
                 ratio = (dist.log_prob(b.act) - b.logp_old).exp().float()
+                # print(ratio)
                 ratio = ratio.reshape(ratio.size(0), -1).transpose(0, 1)
                 surr1 = ratio * b.adv
                 surr2 = ratio.clamp(1.0 - self._eps_clip,

@@ -2,6 +2,7 @@ import time
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from typing import Dict, List, Union, Callable, Optional
+from pprint import pprint
 
 from tianshou.data import Collector
 from tianshou.policy import BasePolicy
@@ -31,17 +32,20 @@ def test_episode(
     count_stp = [0 for _ in range(collector.env_num)]
     result = collector.collect(n_episode=n_episode)
     if writer:
+        print()
         info = collector.buffer.info
+        # pprint(info)
+        # assert False
         for l in range(len(collector.buffer)):
-            tag = f'test-MTLEnv/epoch{epoch}/env{info.env_id[l]}/num{count_eps[info.env_id[l]]}'
-            ite = info.iter[l]
-            action = {}
+            tag = f'test-MTLEnv/epoch{epoch}/env{info.env_id[l]}'
+            # action = {}
             coes = {}
             for t in range(info.num_task[l]):
-                action[f'task{t}'] = info.action[l, t]
+                # action[f'task{t}'] = info.action[l, t]
                 coes[f'task{t}'] = info.coes[l, t]
-            writer.add_scalars(tag + '/action', action, count_stp[info.env_id[l]])
-            writer.add_scalars(tag + '/coe', action, count_stp[info.env_id[l]])
+            # writer.add_scalars(tag + '/action', action, count_stp[info.env_id[l]])
+            writer.add_scalars(tag + '/coe', coes, count_stp[info.env_id[l]])
+            ite = info.iter[l]
             for i in range(len(ite)):
                 loss = {}
                 for t in range(info.num_task[l]):
